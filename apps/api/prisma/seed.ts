@@ -4,8 +4,18 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { createCipheriv, randomBytes } from 'node:crypto';
 
 const prisma = new PrismaClient();
+
+function encryptClientSecret(base64Key: string, plaintext: string): string {
+  const key = Buffer.from(base64Key, 'base64');
+  if (key.length !== 32) throw new Error('CLIENT_SECRET_ENCRYPTION_KEY must decode to exactly 32 bytes');
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return [iv, cipher.getAuthTag(), ciphertext].map((part) => part.toString('base64url')).join('.');
+}
 
 const PERMISSIONS: Array<{ name: string; description: string }> = [
   { name: 'user:read', description: 'View user accounts' },
@@ -45,6 +55,31 @@ const ROLES: Array<{ name: string; description: string; permissions: string[] }>
   },
 ];
 
+async function seedDemoApplication(input: {
+  name: string;
+  clientId?: string;
+  clientSecret?: string;
+  redirectUri: string;
+  postLogoutRedirectUri: string;
+}) {
+  if (!input.clientId || !input.clientSecret) return;
+  const encryptionKey = process.env.CLIENT_SECRET_ENCRYPTION_KEY;
+  if (!encryptionKey) throw new Error('CLIENT_SECRET_ENCRYPTION_KEY is required to seed demo applications');
+
+  // Bootstrap only: a restart must never undo rotation, disablement, or URIs.
+  await prisma.application.upsert({
+    where: { clientId: input.clientId },
+    update: {},
+    create: {
+      name: input.name, clientId: input.clientId, status: 'ACTIVE', type: 'CONFIDENTIAL',
+      redirectUris: { create: { redirectUri: input.redirectUri } },
+      postLogoutRedirectUris: { create: { redirectUri: input.postLogoutRedirectUri } },
+      clientSecrets: { create: { secretCiphertext: encryptClientSecret(encryptionKey, input.clientSecret) } },
+    },
+  });
+  console.log(`Seeded OIDC client: ${input.name}`);
+}
+
 async function main() {
   for (const permission of PERMISSIONS) {
     await prisma.permission.upsert({
@@ -55,31 +90,40 @@ async function main() {
   }
 
   for (const role of ROLES) {
-    const created = await prisma.role.upsert({
+    const permissions = await prisma.permission.findMany({ where: { name: { in: role.permissions } } });
+    await prisma.role.upsert({
       where: { name: role.name },
-      update: { description: role.description },
-      create: { name: role.name, description: role.description },
+      update: {},
+      create: {
+        name: role.name,
+        description: role.description,
+        permissions: { create: permissions.map((permission) => ({ permissionId: permission.id })) },
+      },
     });
-
-    const permissions = await prisma.permission.findMany({
-      where: { name: { in: role.permissions } },
-    });
-
-    await prisma.rolePermission.deleteMany({ where: { roleId: created.id } });
-    if (permissions.length > 0) {
-      await prisma.rolePermission.createMany({
-        data: permissions.map((p) => ({ roleId: created.id, permissionId: p.id })),
-        skipDuplicates: true,
-      });
-    }
   }
+
+  await seedDemoApplication({
+    name: 'Demo App A',
+    clientId: process.env.SEED_DEMO_APP_A_CLIENT_ID,
+    clientSecret: process.env.SEED_DEMO_APP_A_CLIENT_SECRET,
+    redirectUri: process.env.SEED_DEMO_APP_A_REDIRECT_URI ?? 'http://localhost:3002/callback',
+    postLogoutRedirectUri: process.env.SEED_DEMO_APP_A_POST_LOGOUT_URI ?? 'http://localhost:3002',
+  });
+  await seedDemoApplication({
+    name: 'Demo App B',
+    clientId: process.env.SEED_DEMO_APP_B_CLIENT_ID,
+    clientSecret: process.env.SEED_DEMO_APP_B_CLIENT_SECRET,
+    redirectUri: process.env.SEED_DEMO_APP_B_REDIRECT_URI ?? 'http://localhost:3003/callback',
+    postLogoutRedirectUri: process.env.SEED_DEMO_APP_B_POST_LOGOUT_URI ?? 'http://localhost:3003',
+  });
 
   // Optional local-dev super admin, controlled by env so it's never seeded in CI/prod by accident.
   const seedAdminEmail = process.env.SEED_ADMIN_EMAIL;
   const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD;
   if (seedAdminEmail && seedAdminPassword) {
     const passwordHash = await argon2.hash(seedAdminPassword, { type: argon2.argon2id });
-    const admin = await prisma.user.upsert({
+    const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'super-admin' } });
+    await prisma.user.upsert({
       where: { email: seedAdminEmail },
       update: {},
       create: {
@@ -87,14 +131,8 @@ async function main() {
         passwordHash,
         status: 'ACTIVE',
         emailVerified: true,
+        roles: { create: { roleId: superAdminRole.id } },
       },
-    });
-
-    const superAdminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'super-admin' } });
-    await prisma.userRole.upsert({
-      where: { userId_roleId: { userId: admin.id, roleId: superAdminRole.id } },
-      update: {},
-      create: { userId: admin.id, roleId: superAdminRole.id },
     });
 
     console.log(`Seeded super-admin user: ${seedAdminEmail}`);

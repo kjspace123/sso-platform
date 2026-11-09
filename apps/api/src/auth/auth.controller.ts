@@ -7,11 +7,13 @@ import {
   loginSchema,
   registerSchema,
   resetPasswordSchema,
+  verifyEmailSchema,
   type ChangePasswordInput,
   type ForgotPasswordInput,
   type LoginInput,
   type RegisterInput,
   type ResetPasswordInput,
+  type VerifyEmailInput,
 } from '@sso-platform/validation';
 import type { Env } from '@sso-platform/config';
 import { ENV } from '../config/env.module';
@@ -40,7 +42,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const session = await this.auth.register(body.email, body.password, requestContext(req));
-    setSsoSessionCookie(res, session.id, this.env);
+    setSsoSessionCookie(res, session.token, this.env);
     return { id: session.id };
   }
 
@@ -53,7 +55,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const session = await this.auth.login(body.email, body.password, requestContext(req));
-    setSsoSessionCookie(res, session.id, this.env);
+    setSsoSessionCookie(res, session.token, this.env);
     return { id: session.id };
   }
 
@@ -99,6 +101,22 @@ export class AuthController {
     await this.auth.resetPassword(body.token, body.password, requestContext(req));
   }
 
+  @Public()
+  @Post('email-verification/verify')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async verifyEmail(
+    @Body(new ZodValidationPipe(verifyEmailSchema)) body: VerifyEmailInput,
+    @Req() req: Request,
+  ) {
+    await this.auth.verifyEmail(body.token, requestContext(req));
+  }
+
+  @Post('email-verification/resend')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async resendEmailVerification(@CurrentUser() user: AuthenticatedUser, @Req() req: Request) {
+    await this.auth.resendEmailVerification(user.id, requestContext(req));
+  }
+
   @Post('change-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   async changePassword(
@@ -106,6 +124,12 @@ export class AuthController {
     @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput,
     @Req() req: Request,
   ) {
-    await this.auth.changePassword(user.id, body.currentPassword, body.newPassword, requestContext(req));
+    await this.auth.changePassword(
+      user.id,
+      user.sessionId,
+      body.currentPassword,
+      body.newPassword,
+      requestContext(req),
+    );
   }
 }

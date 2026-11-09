@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import type { PublicUser } from "@sso-platform/types";
-import { apiFetch, SSO_WEB_URL } from "@/lib/api";
+import { apiFetch, getSsoWebUrl } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
@@ -32,7 +32,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     queryFn: () => apiFetch<PublicUser>("/users/me"),
   });
 
-  const isAdmin = user?.roles.some((r) => r === "admin" || r === "super-admin") ?? false;
+  const isAdmin = (user?.permissions.length ?? 0) > 0;
 
   useEffect(() => {
     if (!isLoading && (isError || !user)) {
@@ -40,7 +40,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       // Cross-origin redirect to the SSO app, not an internal Next.js route —
       // router.push() can't navigate across origins.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = `${SSO_WEB_URL}/login?returnTo=${returnTo}`;
+      window.location.href = `${getSsoWebUrl()}/login?returnTo=${returnTo}`;
     }
   }, [isLoading, isError, user]);
 
@@ -59,7 +59,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const logout = async () => {
     await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `${SSO_WEB_URL}/login`;
+    window.location.href = `${getSsoWebUrl()}/login`;
   };
 
   return (

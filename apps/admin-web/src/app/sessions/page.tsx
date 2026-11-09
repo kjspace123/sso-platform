@@ -45,7 +45,7 @@ export default function SessionsPage() {
       {error && <p className="text-sm text-red-600">Could not load sessions.</p>}
       {data && (
         <>
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-500">
                 <tr>

@@ -2,9 +2,18 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  '@scarf/scarf': false
   '@nestjs/core': true
   '@prisma/client': true
   '@prisma/engines': true
   argon2: true
   prisma: true
   unrs-resolver: true
+overrides:
+  'qs@<6.16.0': '^6.16.0'
+  'js-yaml@>=4 <4.3.2': '^4.3.2'
+  'js-yaml@>=5 <5.4.1': '^5.4.1'
+  'brace-expansion@>=1 <1.1.21': '^1.1.21'
+  'brace-expansion@>=5 <5.0.12': '^5.0.12'
+  'fast-uri@>=3 <3.1.8': '^3.1.8'
+  'js-yaml@>=3 <3.15.2': '^3.15.2'

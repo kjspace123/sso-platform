@@ -6,34 +6,34 @@ portal, and two demo consumer applications proving cross-app SSO. See
 spec — architecture, database design, security requirements, phased delivery plan, and
 definition of done.
 
-**Status:** Phases 1–7 complete, ahead of schedule (the plan targets Aug 21 for this milestone;
-today is Aug 12). Register/login/logout/logout-all/password reset/change password, sessions,
-RBAC-protected admin APIs, and audit logging all work end-to-end (Phase 3). The OIDC provider is
-fully wired up (Phase 4): `/authorize`, `/token`, discovery, JWKS, userinfo, and RP-initiated
-logout are live, with PKCE required on every client, refresh token rotation + reuse detection
-(whole-family revocation, not just the reused token), and the SSO web app's `/login` and
-`/consent` pages drive the real interaction flow. Both demo apps are real, independent OIDC
-clients (Phases 6–7) — each does its own server-side PKCE + code exchange + ID token
-verification against the issuer's JWKS + userinfo call, with its session as an encrypted cookie
-(no server-side store — see the comment in `apps/demo-app-a/src/lib/session-cookie.ts` for why
-that matters even in a single dev server).
+**Status:** The core authentication, email verification, OIDC, user portal, demo clients, and
+admin-management features are implemented. The provider exposes authorization, token, discovery, JWKS,
+userinfo, revocation, and RP-initiated logout endpoints; clients use Authorization Code + PKCE,
+validate state/nonce and signed ID tokens, and keep their local session in an encrypted cookie.
+Central account/session revocation also removes the account's Redis-backed OIDC sessions,
+grants, authorization codes, and tokens.
 
 **The actual cross-app SSO proof (section 20 / Milestone 3) is verified end-to-end:** sign in via
 Demo App A, then open Demo App B — its `/authorize` request resolves straight to the *consent*
 prompt with zero login prompt, because it reuses the SSO session Demo App A already established.
 That's the whole point of this project, and it demonstrably works.
 
-The admin portal (Phase 8) is essentially complete — users, applications, roles/permissions,
-audit logs, and now platform-wide session visibility/revocation (`GET/POST /admin/sessions`,
-not just the per-user action) all work against real endpoints. Only `/security` remains a
-placeholder (a proper checklist/status view, not a functional gap — everything it would report
-on already exists elsewhere). CSRF protection has also landed (section 16): state-changing
-`/api/*` requests are rejected unless their Origin/Referer matches one of the platform's own
-frontends, on top of the existing SameSite=Lax session cookie.
+The admin portal supports users, role assignment, role permissions, applications, secret
+rotation, enable/disable controls, audit logs, platform-wide session visibility/revocation, and
+a configuration-backed security status page. Users can edit their profile, change passwords,
+manage sessions, and inspect or revoke connected-application grants. State-changing `/api/*`
+requests require an allowlisted Origin/Referer in addition to the SameSite session cookie.
 
-Remaining: Phases 9–10 (a systematic pass against section 21's security test list, and a real
-automated test suite — currently just one unit test) haven't started, nor has deployment
-documentation beyond the Docker Compose setup already in place.
+Security hardening includes separate hashed session credentials, verified email changes,
+privilege checks on account edits, atomic OIDC token consumption, and shared Redis request
+limits covering both API and protocol routes. Dependency patches are pinned in the lockfile.
+
+Validation includes unit tests, database-backed security/protocol tests (`pnpm test:integration`),
+and Chromium cross-app SSO tests (`pnpm test:browser`). Both integration commands use disposable
+Postgres/Redis services, not your development database. See [production deployment](docs/production.md)
+for the separate HTTPS deployment configuration, explicit migration/bootstrap steps, backup and
+recovery procedures, and release checks. Production approval still requires verifying your actual
+SMTP, TLS, monitoring, recovery, and load requirements.
 
 ## Stack
 
@@ -46,6 +46,24 @@ Compose + Nginx. Full rationale in the implementation plan, sections 5–6.
 - Node.js 22+
 - pnpm 11+ (`corepack enable` will pick up the pinned version)
 - Docker (for Postgres/Redis, or the full stack)
+
+## Getting started
+
+Two ways to run this locally — pick one:
+
+- **Fastest: everything in Docker.** One command brings up Postgres, Redis, the API, all four
+  frontends, and Nginx, with migrations and seed data applied automatically. Best if you just
+  want the app running to click around. See [Full stack via Docker Compose](#full-stack-via-docker-compose)
+  below — you'll need one `/etc/hosts` line first.
+- **For active development: apps on the host, infra in Docker.** Only Postgres/Redis run in
+  containers; every app runs via `pnpm dev` with hot reload. See
+  [Quick start (local dev)](#quick-start-local-dev-apps-run-on-the-host) below.
+
+Either way, once it's running, sign in at http://localhost:3000 (or http://sso.sso.test for the
+Docker path) — there's no account yet, so click **Create one** to register, or set
+`SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` in `apps/api/.env` beforehand to get a ready-made
+super-admin. See [How sign-in works](#how-sign-in-works-oidc) and
+[Try cross-app SSO](#try-cross-app-sso) for what to do once you're in.
 
 ## Quick start (local dev, apps run on the host)
 
@@ -96,19 +114,31 @@ docker compose up --build
 ```
 
 This brings up Postgres, Redis, the API, all four frontends, and Nginx as a single entrypoint.
-Nginx routes by hostname (`*.localhost` resolves to `127.0.0.1` without any `/etc/hosts` changes
-on most systems — see `docker/nginx/nginx.conf`):
+The API entrypoint applies committed migrations and idempotently seeds roles, permissions, and
+the two Compose demo clients before starting. Set `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD`
+in `apps/api/.env` if the Compose stack should also create a super-admin.
+Add the development domains once before opening the stack:
+
+```text
+127.0.0.1 sso.sso.test admin.sso.test app-a.sso.test app-b.sso.test api.sso.test
+```
+
+On macOS/Linux, append that line to `/etc/hosts` with administrator privileges. These names
+share the registrable site `sso.test`, so SameSite cookies work between the frontend and API
+without weakening them to `SameSite=None`. Nginx routes the following hostnames:
 
 | Hostname            | Routes to    |
 | -------------------- | ------------ |
-| http://sso.localhost | sso-web      |
-| http://admin.localhost | admin-web  |
-| http://app-a.localhost | demo-app-a |
-| http://app-b.localhost | demo-app-b |
-| http://api.localhost | api          |
+| http://sso.sso.test | sso-web      |
+| http://admin.sso.test | admin-web  |
+| http://app-a.sso.test | demo-app-a |
+| http://app-b.sso.test | demo-app-b |
+| http://api.sso.test | api          |
 
-Each app is its own origin here — intentionally, since real SSO works via OIDC redirects
-between origins, not a cookie shared across ports (see section 4 / 11 of the plan).
+Each app is its own origin here; SSO still works through OIDC redirects, while host-only cookies
+remain scoped to the service that issued them (see sections 4 and 11 of the plan).
+The local Compose stack uses HTTP and binds published ports to loopback.
+Use `compose.production.yaml` for deployment; see [the production guide](docs/production.md).
 
 ## How sign-in works (OIDC)
 
@@ -125,7 +155,7 @@ Login and consent are rendered by the SSO web app, not oidc-provider's own UI
 1. A client redirects the browser to `{API}/authorize?...&code_challenge=...`.
 2. oidc-provider redirects to `{SSO_BASE_URL}/login?interaction=<uid>` (or `/consent`) —
    `apps/api/src/oidc/oidc-provider.service.ts`'s `interactions.url`.
-3. Those pages call `GET/POST /api/oidc/interaction/:uid[/login|/confirm|/abort]`
+3. Those pages call `GET/POST /api/oidc/interaction/:uid[/login|/register|/confirm|/abort]`
    (`apps/api/src/oidc/interaction.controller.ts`), which reads/writes oidc-provider's own
    interaction state via `interactionDetails`/`interactionResult` — never oidc-provider's own
    response-writing `interactionFinished`, since these are JSON endpoints, not page renders.
@@ -201,6 +231,11 @@ pnpm build:packages       # just the shared packages (types/validation/config/ui
 pnpm lint / pnpm typecheck / pnpm test
 pnpm prisma:studio        # inspect the database
 pnpm prisma:migrate       # create/apply a migration
+
+# API-specific (run from apps/api, or prefix with `pnpm --filter @sso-platform/api`)
+pnpm test:integration     # from the repo root: disposable DB/Redis + security/protocol tests
+pnpm test:browser         # from the repo root: real Chromium cross-app SSO
+pnpm export-openapi       # regenerate docs/api/openapi.json (see docs/api/README.md)
 ```
 
 > Shared `packages/*` compile to real `dist/` output (not run from source) — pnpm's isolated

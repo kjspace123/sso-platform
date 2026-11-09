@@ -45,6 +45,7 @@ The first release should prioritize a **working, secure, end-to-end SSO system**
 Users should be able to:
 
 - Register an account
+- Verify their email address
 - Log in through the centralized SSO
 - Access multiple applications without logging in again
 - Log out
@@ -100,6 +101,7 @@ The MVP includes:
 ### Authentication
 
 - Registration
+- Email verification and resend
 - Login
 - Logout
 - Forgot password
@@ -942,6 +944,7 @@ The following are core requirements:
 - Sensitive value redaction in logs
 - Client secret hashing
 - Password reset token hashing
+- Email verification token hashing, expiry, and single-use enforcement
 
 ---
 
@@ -952,6 +955,8 @@ The following are core requirements:
 ```text
 POST /auth/register
 POST /auth/login
+POST /auth/email-verification/verify
+POST /auth/email-verification/resend
 POST /auth/logout
 POST /auth/logout-all
 POST /auth/forgot-password
@@ -1014,6 +1019,8 @@ Important events to record:
 
 ```text
 USER_REGISTERED
+EMAIL_VERIFICATION_REQUESTED
+EMAIL_VERIFIED
 USER_LOGIN
 USER_LOGIN_FAILED
 USER_LOGOUT
@@ -1373,6 +1380,8 @@ SMTP_HOST
 SMTP_PORT
 SMTP_USER
 SMTP_PASSWORD
+SMTP_FROM
+SMTP_SECURE
 
 LOG_LEVEL
 ```

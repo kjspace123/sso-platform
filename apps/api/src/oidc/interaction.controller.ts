@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { loginSchema, type LoginInput } from '@sso-platform/validation';
+import { loginSchema, registerSchema, type LoginInput, type RegisterInput } from '@sso-platform/validation';
 import type { Env } from '@sso-platform/config';
 import { ENV } from '../config/env.module';
 import { Public } from '../common/decorators/public.decorator';
@@ -61,7 +61,7 @@ export class InteractionController {
     // audit logging as a direct /auth/login (section 16) — an OIDC login
     // prompt is not a weaker path than the SSO web app's own login form.
     const session = await this.auth.login(body.email, body.password, ctx);
-    setSsoSessionCookie(res, session.id, this.env);
+    setSsoSessionCookie(res, session.token, this.env);
 
     const redirectTo = await provider.interactionResult(
       req,
@@ -70,6 +70,25 @@ export class InteractionController {
       { mergeWithLastSubmission: false },
     );
 
+    return { redirectTo };
+  }
+
+  @Public()
+  @Post(':uid/register')
+  async register(
+    @Param('uid') _uid: string,
+    @Body(new ZodValidationPipe(registerSchema)) body: RegisterInput,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const session = await this.auth.register(body.email, body.password, requestContext(req));
+    setSsoSessionCookie(res, session.token, this.env);
+    const redirectTo = await this.oidc.provider.interactionResult(
+      req,
+      res,
+      { login: { accountId: session.userId } },
+      { mergeWithLastSubmission: false },
+    );
     return { redirectTo };
   }
 

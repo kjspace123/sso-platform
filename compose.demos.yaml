@@ -1,0 +1,63 @@
+# Optional staging demos. Layer over compose.production.yaml using the SAME project name.
+services:
+  api:
+    environment:
+      DEMO_APP_A_BASE_URL: https://${DEMO_APP_A_HOST:?Set DEMO_APP_A_HOST}
+      DEMO_APP_B_BASE_URL: https://${DEMO_APP_B_HOST:?Set DEMO_APP_B_HOST}
+      SEED_DEMO_APP_A_CLIENT_ID: ${DEMO_APP_A_CLIENT_ID:?Set DEMO_APP_A_CLIENT_ID}
+      SEED_DEMO_APP_A_CLIENT_SECRET: ${DEMO_APP_A_CLIENT_SECRET:?Set DEMO_APP_A_CLIENT_SECRET}
+      SEED_DEMO_APP_A_REDIRECT_URI: https://${DEMO_APP_A_HOST}/callback
+      SEED_DEMO_APP_A_POST_LOGOUT_URI: https://${DEMO_APP_A_HOST}
+      SEED_DEMO_APP_B_CLIENT_ID: ${DEMO_APP_B_CLIENT_ID:?Set DEMO_APP_B_CLIENT_ID}
+      SEED_DEMO_APP_B_CLIENT_SECRET: ${DEMO_APP_B_CLIENT_SECRET:?Set DEMO_APP_B_CLIENT_SECRET}
+      SEED_DEMO_APP_B_REDIRECT_URI: https://${DEMO_APP_B_HOST}/callback
+      SEED_DEMO_APP_B_POST_LOGOUT_URI: https://${DEMO_APP_B_HOST}
+  sso-web:
+    build:
+      args:
+        NEXT_PUBLIC_ALLOWED_RETURN_ORIGINS: https://${ADMIN_HOST},https://${DEMO_APP_A_HOST},https://${DEMO_APP_B_HOST}
+  demo-app-a:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: demo-app-a
+        PORT: '3002'
+        NEXT_PUBLIC_APP_URL: https://${DEMO_APP_A_HOST}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_APP_URL: https://${DEMO_APP_A_HOST}
+      OIDC_ISSUER: https://${API_HOST}
+      OIDC_INTERNAL_URL: https://${API_HOST}
+      OIDC_CLIENT_ID: ${DEMO_APP_A_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${DEMO_APP_A_CLIENT_SECRET}
+      SESSION_SECRET: ${DEMO_APP_A_SESSION_SECRET:?Set DEMO_APP_A_SESSION_SECRET}
+      COOKIE_SECURE: 'true'
+    networks: [edge]
+  demo-app-b:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: demo-app-b
+        PORT: '3003'
+        NEXT_PUBLIC_APP_URL: https://${DEMO_APP_B_HOST}
+    restart: unless-stopped
+    environment:
+      DEMO_APP_A_URL: https://${DEMO_APP_A_HOST}
+      NEXT_PUBLIC_APP_URL: https://${DEMO_APP_B_HOST}
+      OIDC_ISSUER: https://${API_HOST}
+      OIDC_INTERNAL_URL: https://${API_HOST}
+      OIDC_CLIENT_ID: ${DEMO_APP_B_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${DEMO_APP_B_CLIENT_SECRET}
+      SESSION_SECRET: ${DEMO_APP_B_SESSION_SECRET:?Set DEMO_APP_B_SESSION_SECRET}
+      COOKIE_SECURE: 'true'
+    networks: [edge]
+  proxy:
+    environment:
+      DEMO_APP_A_HOST: ${DEMO_APP_A_HOST}
+      DEMO_APP_B_HOST: ${DEMO_APP_B_HOST}
+    volumes:
+      - ./docker/Caddyfile.demos:/etc/caddy/Caddyfile:ro
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile.base:ro
+    depends_on: [demo-app-a, demo-app-b]

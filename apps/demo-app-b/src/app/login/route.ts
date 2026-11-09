@@ -25,7 +25,7 @@ export async function GET() {
   // across the redirect round trip to /callback for verification there.
   response.cookies.set(PENDING_COOKIE, JSON.stringify({ verifier, state, nonce }), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: oidcConfig.secureCookies,
     sameSite: "lax",
     maxAge: 600,
     path: "/",

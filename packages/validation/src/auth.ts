@@ -37,6 +37,14 @@ export const resetPasswordSchema = z.object({
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
+export const verifyEmailSchema = z.object({
+  token: z
+    .string()
+    .min(32, 'Verification token is invalid')
+    .max(256, 'Verification token is invalid'),
+});
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1),

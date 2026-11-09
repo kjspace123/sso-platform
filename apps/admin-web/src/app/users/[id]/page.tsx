@@ -1,8 +1,9 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PublicUser } from "@sso-platform/types";
+import type { PublicRole, PublicUser } from "@sso-platform/types";
 import { apiFetch, ApiError } from "@/lib/api";
 
 export default function UserDetailPage() {
@@ -13,6 +14,10 @@ export default function UserDetailPage() {
   const { data: user, isLoading, error } = useQuery({
     queryKey: ["admin", "users", id],
     queryFn: () => apiFetch<PublicUser>(`/admin/users/${id}`),
+  });
+  const { data: roles } = useQuery({
+    queryKey: ["admin", "roles"],
+    queryFn: () => apiFetch<PublicRole[]>("/admin/roles"),
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "users", id] });
@@ -45,7 +50,7 @@ export default function UserDetailPage() {
       <div className="rounded-xl border border-neutral-200 bg-white p-6">
         <dl className="grid grid-cols-[140px_1fr] gap-y-3 text-sm">
           <dt className="text-neutral-500">Email</dt>
-          <dd className="font-medium">{user.email}</dd>
+          <dd className="font-medium">{user.email}{user.pendingEmail && <span className="mt-1 block text-xs text-amber-800">Awaiting verification: {user.pendingEmail}</span>}</dd>
           <dt className="text-neutral-500">Status</dt>
           <dd>{user.status}</dd>
           <dt className="text-neutral-500">Roles</dt>
@@ -58,6 +63,7 @@ export default function UserDetailPage() {
           <dd>{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : "—"}</dd>
         </dl>
       </div>
+      {roles && <RoleEditor key={user.updatedAt} user={user} roles={roles} onSaved={invalidate} />}
       <div className="flex gap-3">
         <button
           onClick={toggleStatus}
@@ -72,6 +78,58 @@ export default function UserDetailPage() {
           Revoke all sessions
         </button>
       </div>
+    </div>
+  );
+}
+
+function RoleEditor({ user, roles, onSaved }: { user: PublicUser; roles: PublicRole[]; onSaved: () => void }) {
+  const [selected, setSelected] = useState(() => new Set(user.roles));
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const toggle = (roleName: string) => {
+    setStatus("idle");
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(roleName)) next.delete(roleName);
+      else next.add(roleName);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    setStatus("saving");
+    try {
+      await apiFetch(`/admin/users/${user.id}/roles`, {
+        method: "PUT",
+        body: JSON.stringify({ roleIds: roles.filter((role) => selected.has(role.name)).map((role) => role.id) }),
+      });
+      setStatus("saved");
+      onSaved();
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-white p-6">
+      <h2 className="mb-3 text-sm font-semibold">Assigned roles</h2>
+      <div className="grid grid-cols-2 gap-2">
+        {roles.map((role) => (
+          <label key={role.id} className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={selected.has(role.name)} onChange={() => toggle(role.name)} />
+            {role.name}
+          </label>
+        ))}
+      </div>
+      <button
+        onClick={save}
+        disabled={status === "saving"}
+        className="mt-4 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+      >
+        {status === "saving" ? "Saving…" : "Save roles"}
+      </button>
+      {status === "saved" && <span className="ml-3 text-sm text-green-700">Saved.</span>}
+      {status === "error" && <span className="ml-3 text-sm text-red-600">Could not update roles.</span>}
     </div>
   );
 }

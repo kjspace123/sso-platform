@@ -1,0 +1,23 @@
+# Disposable data, isolated ports; never points at the development database.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sso
+      POSTGRES_PASSWORD: test-only
+      POSTGRES_DB: sso_test
+    ports: ['127.0.0.1:55434:5432']
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U sso -d sso_test]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    ports: ['127.0.0.1:56381:6379']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30

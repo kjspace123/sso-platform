@@ -1,0 +1,795 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "operationId": "AuthController_logoutAll",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "operationId": "AuthController_resetPassword",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/email-verification/verify": {
+      "post": {
+        "operationId": "AuthController_verifyEmail",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/email-verification/resend": {
+      "post": {
+        "operationId": "AuthController_resendEmailVerification",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "operationId": "AuthController_changePassword",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "operationId": "UsersController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_updateMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/me/sessions": {
+      "get": {
+        "operationId": "UsersController_mySessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/me/applications": {
+      "get": {
+        "operationId": "UsersController_connectedApplications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/me/applications/{id}": {
+      "delete": {
+        "operationId": "UsersController_revokeApplication",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/users/me/sessions/{id}": {
+      "delete": {
+        "operationId": "UsersController_revokeMySession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/oidc/interaction/{uid}": {
+      "get": {
+        "operationId": "InteractionController_details",
+        "parameters": [
+          {
+            "name": "uid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "oidc"
+        ]
+      }
+    },
+    "/oidc/interaction/{uid}/login": {
+      "post": {
+        "operationId": "InteractionController_login",
+        "parameters": [
+          {
+            "name": "uid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "oidc"
+        ]
+      }
+    },
+    "/oidc/interaction/{uid}/register": {
+      "post": {
+        "operationId": "InteractionController_register",
+        "parameters": [
+          {
+            "name": "uid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "oidc"
+        ]
+      }
+    },
+    "/oidc/interaction/{uid}/confirm": {
+      "post": {
+        "operationId": "InteractionController_confirm",
+        "parameters": [
+          {
+            "name": "uid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "oidc"
+        ]
+      }
+    },
+    "/oidc/interaction/{uid}/abort": {
+      "post": {
+        "operationId": "InteractionController_abort",
+        "parameters": [
+          {
+            "name": "uid",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "oidc"
+        ]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminUsersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminUsersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminUsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/users/{id}/roles": {
+      "put": {
+        "operationId": "AdminUsersController_updateRoles",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/users/{id}/disable": {
+      "post": {
+        "operationId": "AdminUsersController_disable",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/users/{id}/enable": {
+      "post": {
+        "operationId": "AdminUsersController_enable",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/users/{id}/revoke-sessions": {
+      "post": {
+        "operationId": "AdminUsersController_revokeSessions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/users"
+        ]
+      }
+    },
+    "/admin/applications": {
+      "get": {
+        "operationId": "AdminApplicationsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      },
+      "post": {
+        "operationId": "AdminApplicationsController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      }
+    },
+    "/admin/applications/{id}": {
+      "get": {
+        "operationId": "AdminApplicationsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminApplicationsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      }
+    },
+    "/admin/applications/{id}/rotate-secret": {
+      "post": {
+        "operationId": "AdminApplicationsController_rotateSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      }
+    },
+    "/admin/applications/{id}/disable": {
+      "post": {
+        "operationId": "AdminApplicationsController_disable",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      }
+    },
+    "/admin/applications/{id}/enable": {
+      "post": {
+        "operationId": "AdminApplicationsController_enable",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/applications"
+        ]
+      }
+    },
+    "/admin/roles": {
+      "get": {
+        "operationId": "AdminRolesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/roles"
+        ]
+      },
+      "post": {
+        "operationId": "AdminRolesController_create",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/roles"
+        ]
+      }
+    },
+    "/admin/roles/{id}": {
+      "patch": {
+        "operationId": "AdminRolesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/roles"
+        ]
+      }
+    },
+    "/admin/permissions": {
+      "get": {
+        "operationId": "AdminPermissionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/permissions"
+        ]
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "operationId": "AdminAuditController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/audit-logs"
+        ]
+      }
+    },
+    "/admin/sessions": {
+      "get": {
+        "operationId": "AdminSessionsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/sessions"
+        ]
+      }
+    },
+    "/admin/sessions/{id}/revoke": {
+      "post": {
+        "operationId": "AdminSessionsController_revoke",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/sessions"
+        ]
+      }
+    },
+    "/admin/security": {
+      "get": {
+        "operationId": "AdminSecurityController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin/security"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "SSO Platform API",
+    "description": "Authentication, RBAC, application, session, and audit APIs.",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sso_session"
+      }
+    },
+    "schemas": {}
+  }
+}

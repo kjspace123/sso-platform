@@ -8,8 +8,8 @@ import { SSO_SESSION_COOKIE } from '../guards/session-auth.guard';
  * controller (logging in as part of an /authorize flow) so both paths leave
  * the user in the exact same "logged in" state.
  */
-export function setSsoSessionCookie(res: Response, sessionId: string, env: Env) {
-  res.cookie(SSO_SESSION_COOKIE, sessionId, {
+export function setSsoSessionCookie(res: Response, token: string, env: Env) {
+  res.cookie(SSO_SESSION_COOKIE, token, {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'lax',

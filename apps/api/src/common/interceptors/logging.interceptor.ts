@@ -13,7 +13,11 @@ export class LoggingInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        this.logger.log(`${request.method} ${request.url} +${Date.now() - start}ms`);
+        // request.id is assigned by pino-http (see LoggingModule) — logging
+        // it here lets a single request's line be grep'd against its own
+        // error log (AllExceptionsFilter) or the requestId an operator was
+        // handed in an error response.
+        this.logger.log(`${request.method} ${request.url} +${Date.now() - start}ms [${request.id}]`);
       }),
     );
   }

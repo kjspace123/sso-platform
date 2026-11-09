@@ -21,7 +21,11 @@ const SCOPE_LABELS: Record<string, string> = {
 
 export default function ConsentPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>
+      }
+    >
       <ConsentContent />
     </Suspense>
   );

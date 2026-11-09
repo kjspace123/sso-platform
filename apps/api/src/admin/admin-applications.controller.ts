@@ -51,7 +51,7 @@ export class AdminApplicationsController {
       ipAddress: req.ip ?? null,
     });
     // Client secret is only ever returned at creation/rotation time.
-    return { ...this.applications.toPublic(application), clientSecret };
+    return { ...this.applications.toPublic(application), ...(clientSecret ? { clientSecret } : {}) };
   }
 
   @Patch(':id')
@@ -94,6 +94,20 @@ export class AdminApplicationsController {
     await this.audit.record({
       actorId: admin.id,
       action: AUDIT_ACTIONS.APPLICATION_DISABLED,
+      resourceType: 'Application',
+      resourceId: id,
+      ipAddress: req.ip ?? null,
+    });
+    return this.applications.toPublic(application);
+  }
+
+  @Post(':id/enable')
+  @RequirePermission(PERMISSIONS.APPLICATION_DISABLE)
+  async enable(@Param('id') id: string, @CurrentUser() admin: AuthenticatedUser, @Req() req: Request) {
+    const application = await this.applications.enable(id);
+    await this.audit.record({
+      actorId: admin.id,
+      action: AUDIT_ACTIONS.APPLICATION_ENABLED,
       resourceType: 'Application',
       resourceId: id,
       ipAddress: req.ip ?? null,

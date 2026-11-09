@@ -21,7 +21,9 @@ export class ClientAdapter implements Adapter {
       include: {
         redirectUris: true,
         postLogoutRedirectUris: true,
-        clientSecrets: { where: { revokedAt: null } },
+        clientSecrets: {
+          where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        },
       },
     });
 

@@ -20,7 +20,7 @@ export default function PermissionsPage() {
       {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
       {error && <p className="text-sm text-red-600">Could not load permissions.</p>}
       {permissions && (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-500">
               <tr>

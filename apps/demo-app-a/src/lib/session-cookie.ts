@@ -55,7 +55,8 @@ export function decodeSession(cookieValue: string | undefined): DemoSession | un
       decipher.final(),
     ]).toString("utf8");
 
-    return JSON.parse(plaintext) as DemoSession;
+    const session = JSON.parse(plaintext) as DemoSession;
+    return session.expiresAt > Date.now() ? session : undefined;
   } catch {
     // Tampered, expired-key-rotated, or otherwise invalid — treat as signed out.
     return undefined;

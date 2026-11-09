@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createApplicationSchema, type CreateApplicationInput } from "@sso-platform/validation";
 import type { PublicApplication } from "@sso-platform/types";
 import { apiFetch, ApiError } from "@/lib/api";
+import { SecretReveal } from "@/components/secret-reveal";
 
 export default function ApplicationsPage() {
   const [showCreate, setShowCreate] = useState(false);
@@ -33,11 +34,11 @@ export default function ApplicationsPage() {
 
   const onSubmit = async (data: CreateApplicationInput) => {
     try {
-      const created = await apiFetch<PublicApplication & { clientSecret: string }>("/admin/applications", {
+      const created = await apiFetch<PublicApplication & { clientSecret?: string }>("/admin/applications", {
         method: "POST",
         body: JSON.stringify(data),
       });
-      setNewSecret({ name: created.name, clientSecret: created.clientSecret });
+      setNewSecret(created.clientSecret ? { name: created.name, clientSecret: created.clientSecret } : null);
       reset();
       setShowCreate(false);
       queryClient.invalidateQueries({ queryKey: ["admin", "applications"] });
@@ -58,14 +59,7 @@ export default function ApplicationsPage() {
         </button>
       </div>
 
-      {newSecret && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm">
-          <p className="font-medium text-amber-900">
-            Client secret for {newSecret.name} — copy it now, it won&apos;t be shown again:
-          </p>
-          <code className="mt-2 block break-all rounded bg-white px-2 py-1 text-xs">{newSecret.clientSecret}</code>
-        </div>
-      )}
+      {newSecret && <SecretReveal label={`Client secret for ${newSecret.name}`} value={newSecret.clientSecret} />}
 
       {showCreate && (
         <form
@@ -108,7 +102,7 @@ export default function ApplicationsPage() {
       {isLoading && <p className="text-sm text-neutral-500">Loading…</p>}
       {error && <p className="text-sm text-red-600">Could not load applications.</p>}
       {applications && (
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-500">
               <tr>

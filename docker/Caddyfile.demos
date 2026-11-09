@@ -1,0 +1,10 @@
+import /etc/caddy/Caddyfile.base
+
+{$DEMO_APP_A_HOST} {
+  import security
+  reverse_proxy demo-app-a:3002
+}
+{$DEMO_APP_B_HOST} {
+  import security
+  reverse_proxy demo-app-b:3003
+}

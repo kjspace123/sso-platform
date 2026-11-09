@@ -4,6 +4,7 @@ import type { Request } from 'express';
 import { PrismaService } from '../../database/prisma.service';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import type { AuthenticatedUser } from '../types/authenticated-user';
+import { hashSessionToken } from '../../sessions/session-token';
 
 export const SSO_SESSION_COOKIE = 'sso_session';
 
@@ -27,11 +28,13 @@ export class SessionAuthGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
-    const sessionId = request.cookies?.[SSO_SESSION_COOKIE] as string | undefined;
-    if (!sessionId) throw new UnauthorizedException('No active session');
+    const token: unknown = request.cookies?.[SSO_SESSION_COOKIE];
+    if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
+      throw new UnauthorizedException('No active session');
+    }
 
     const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+      where: { tokenHash: hashSessionToken(token) },
       include: {
         user: {
           include: {
@@ -60,7 +63,9 @@ export class SessionAuthGuard implements CanActivate {
     };
 
     // Sliding last-seen — cheap and gives session lists an accurate signal.
-    void this.prisma.session.update({ where: { id: session.id }, data: { lastSeenAt: new Date() } });
+    void this.prisma.session
+      .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
+      .catch(() => undefined);
 
     return true;
   }

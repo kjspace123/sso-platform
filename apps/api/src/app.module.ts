@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { EnvModule } from './config/env.module';
+import { LoggingModule } from './logging/logging.module';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './database/redis.module';
 import { CryptoModule } from './common/crypto/crypto.module';
@@ -19,10 +20,12 @@ import { PasswordResetModule } from './password-reset/password-reset.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthModule } from './health/health.module';
 import { OidcModule } from './oidc/oidc.module';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 @Module({
   imports: [
     EnvModule,
+    LoggingModule,
     DatabaseModule,
     RedisModule,
     CryptoModule,
@@ -45,6 +48,7 @@ import { OidcModule } from './oidc/oidc.module';
     // Runs after SessionAuthGuard; enforces @RequirePermission() (section 14).
     { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
   ],
 })
 export class AppModule {}

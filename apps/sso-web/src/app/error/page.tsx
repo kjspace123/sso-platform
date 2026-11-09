@@ -7,7 +7,11 @@ import { AuthCard } from "@/components/auth-card";
 
 export default function ErrorPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>
+      }
+    >
       <ErrorContent />
     </Suspense>
   );

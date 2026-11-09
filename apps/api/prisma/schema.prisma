@@ -32,6 +32,7 @@ enum UserStatus {
 model User {
   id            String     @id @default(cuid())
   email         String     @unique
+  pendingEmail  String?
   passwordHash  String
   status        UserStatus @default(ACTIVE)
   emailVerified Boolean    @default(false)
@@ -39,10 +40,11 @@ model User {
   updatedAt     DateTime   @updatedAt
   lastLoginAt   DateTime?
 
-  roles               UserRole[]
-  sessions            Session[]
-  passwordResetTokens PasswordResetToken[]
-  auditLogs           AuditLog[]            @relation("AuditActor")
+  roles                   UserRole[]
+  sessions                Session[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogs               AuditLog[]               @relation("AuditActor")
 
   @@index([status])
   @@map("users")
@@ -151,8 +153,8 @@ model ApplicationPostLogoutRedirectUri {
 }
 
 model ClientSecret {
-  id            String    @id @default(cuid())
-  applicationId String
+  id               String    @id @default(cuid())
+  applicationId    String
   // AES-256-GCM ciphertext (iv/tag/ciphertext, base64url, colon-delimited),
   // not a one-way hash: the OIDC token endpoint has to compare the actual
   // secret a confidential client presents (client_secret_basic/post), so it
@@ -175,6 +177,7 @@ model ClientSecret {
 
 model Session {
   id         String    @id @default(cuid())
+  tokenHash  String?   @unique
   userId     String
   ipAddress  String?
   userAgent  String?
@@ -184,28 +187,13 @@ model Session {
   expiresAt  DateTime
   revokedAt  DateTime?
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  // Composite index backing sessions.service.ts's listActiveForUser/listAll
+  // queries, which filter on revokedAt/expiresAt and sort by lastSeenAt —
+  // the plain userId index alone left those index-assisted-but-not-covered.
+  @@index([userId, revokedAt, expiresAt])
   @@map("sessions")
-}
-
-model RefreshToken {
-  id        String    @id @default(cuid())
-  sessionId String
-  tokenHash String    @unique
-  familyId  String
-  createdAt DateTime  @default(now())
-  expiresAt DateTime
-  usedAt    DateTime?
-  revokedAt DateTime?
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@index([sessionId])
-  @@index([familyId])
-  @@map("refresh_tokens")
 }
 
 model PasswordResetToken {
@@ -220,6 +208,21 @@ model PasswordResetToken {
 
   @@index([userId])
   @@map("password_reset_tokens")
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  email     String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
 }
 
 // ---------------------------------------------------------------------------

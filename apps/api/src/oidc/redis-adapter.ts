@@ -14,9 +14,31 @@ const GRANTABLE = new Set([
   'PreAuthorizedCode',
 ]);
 
-function dataKey(model: string, id: string) {
+export function oidcDataKey(model: string, id: string) {
   return `oidc:${model}:${id}`;
 }
+
+function grantIndexKey(grantId: string) {
+  return `oidc:grant:${grantId}`;
+}
+
+function accountIndexKey(accountId: string) {
+  return `oidc:account:${accountId}`;
+}
+
+const INDEX_FALLBACK_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+// Check-and-mark atomically; never recreate an expired key or lose its TTL.
+export const CONSUME_SCRIPT = `
+local data = redis.call('GET', KEYS[1])
+if not data then return {'missing', ''} end
+local payload = cjson.decode(data)
+if payload.consumed then return {'reused', payload.grantId or ''} end
+if redis.call('PTTL', KEYS[1]) <= 0 then return {'expired', ''} end
+payload.consumed = tonumber(ARGV[1])
+redis.call('SET', KEYS[1], cjson.encode(payload), 'KEEPTTL')
+return {'consumed', ''}
+`;
 
 /**
  * oidc-provider Adapter backed by Redis — every protocol-transient model
@@ -34,7 +56,7 @@ export class RedisAdapter implements Adapter {
   ) {}
 
   private key(id: string) {
-    return dataKey(this.model, id);
+    return oidcDataKey(this.model, id);
   }
 
   async upsert(id: string, payload: AdapterPayload, expiresIn?: number): Promise<void> {
@@ -57,8 +79,22 @@ export class RedisAdapter implements Adapter {
       else multi.set(codeKey, id);
     }
 
+    const indexTtl = expiresIn ?? INDEX_FALLBACK_TTL_SECONDS;
     if (GRANTABLE.has(this.model) && payload.grantId) {
-      multi.sadd(`oidc:grant:${payload.grantId}`, `${this.model}:${id}`);
+      const grantKey = grantIndexKey(payload.grantId);
+      multi.sadd(grantKey, `${this.model}:${id}`);
+      // Keep reverse indexes only as long as their longest-lived member. NX
+      // handles a new set and GT extends (but never shortens) an existing one.
+      multi.expire(grantKey, indexTtl, 'NX');
+      multi.expire(grantKey, indexTtl, 'GT');
+    }
+
+    const accountId = payload.accountId ?? payload.session?.accountId;
+    if (accountId) {
+      const accountKey = accountIndexKey(accountId);
+      multi.sadd(accountKey, `${this.model}:${id}`);
+      multi.expire(accountKey, indexTtl, 'NX');
+      multi.expire(accountKey, indexTtl, 'GT');
     }
 
     await multi.exec();
@@ -80,12 +116,17 @@ export class RedisAdapter implements Adapter {
   }
 
   async consume(id: string): Promise<void> {
-    const key = this.key(id);
-    const [data, ttl] = await Promise.all([this.redis.get(key), this.redis.ttl(key)]);
-    if (!data) return;
-    const payload = { ...(JSON.parse(data) as AdapterPayload), consumed: Math.floor(Date.now() / 1000) };
-    if (ttl > 0) await this.redis.set(key, JSON.stringify(payload), 'EX', ttl);
-    else await this.redis.set(key, JSON.stringify(payload));
+    const [status, grantId] = await this.redis.eval(
+      CONSUME_SCRIPT, 1, this.key(id), Math.floor(Date.now() / 1000),
+    ) as [string, string];
+    if (status === 'consumed') return;
+    if (grantId) {
+      // Invalidates tokens from a winning request still in flight at reuse.
+      await new RedisAdapter('Grant', this.redis).destroy(grantId);
+      await this.revokeByGrantId(grantId);
+    }
+    const { errors } = await import('oidc-provider');
+    throw new errors.InvalidGrant('Token is missing, expired, or already consumed');
   }
 
   async destroy(id: string): Promise<void> {
@@ -96,16 +137,93 @@ export class RedisAdapter implements Adapter {
       const payload = JSON.parse(data) as AdapterPayload;
       if (payload.uid) multi.del(`oidc:uid:${payload.uid}`);
       if (payload.userCode) multi.del(`oidc:userCode:${payload.userCode}`);
+      if (payload.grantId) multi.srem(grantIndexKey(payload.grantId), `${this.model}:${id}`);
+      const accountId = payload.accountId ?? payload.session?.accountId;
+      if (accountId) multi.srem(accountIndexKey(accountId), `${this.model}:${id}`);
     }
     await multi.exec();
   }
 
   async revokeByGrantId(grantId: string): Promise<void> {
-    const grantKey = `oidc:grant:${grantId}`;
+    const grantKey = grantIndexKey(grantId);
     const members = await this.redis.smembers(grantKey);
-    if (members.length === 0) return;
+    if (members.length === 0) {
+      await this.redis.del(grantKey);
+      return;
+    }
     await this.redis.del(...members.map((m) => `oidc:${m}`), grantKey);
   }
+}
+
+export interface StoredOidcGrant {
+  id: string;
+  payload: AdapterPayload;
+}
+
+/** Returns the live grants currently associated with an account. */
+export async function findOidcGrantsForAccount(redis: Redis, accountId: string): Promise<StoredOidcGrant[]> {
+  const accountKey = accountIndexKey(accountId);
+  const members = (await redis.smembers(accountKey)).filter((member) => member.startsWith('Grant:'));
+  if (members.length === 0) return [];
+
+  const values = await redis.mget(...members.map((member) => `oidc:${member}`));
+  const grants: StoredOidcGrant[] = [];
+  const staleMembers: string[] = [];
+  members.forEach((member, index) => {
+    const value = values[index];
+    if (!value) {
+      staleMembers.push(member);
+      return;
+    }
+    const payload = JSON.parse(value) as AdapterPayload;
+    if (payload.accountId === accountId) grants.push({ id: member.slice('Grant:'.length), payload });
+  });
+  if (staleMembers.length > 0) await redis.srem(accountKey, ...staleMembers);
+  return grants;
+}
+
+/** Revokes a single account-owned grant and every token issued under it. */
+export async function revokeOidcGrant(redis: Redis, accountId: string, grantId: string): Promise<boolean> {
+  const key = oidcDataKey('Grant', grantId);
+  const value = await redis.get(key);
+  if (!value) return false;
+  const grant = JSON.parse(value) as AdapterPayload;
+  if (grant.accountId !== accountId) return false;
+
+  await new RedisAdapter('Grant', redis).revokeByGrantId(grantId);
+  await redis.multi().del(key).srem(accountIndexKey(accountId), `Grant:${grantId}`).exec();
+  return true;
+}
+
+/**
+ * Revokes all OIDC sessions, grants, authorization codes, and tokens for an
+ * account. This keeps central-session revocation meaningful across the OIDC
+ * provider instead of only deleting the portal's PostgreSQL cookie session.
+ */
+export async function revokeOidcAccount(redis: Redis, accountId: string): Promise<void> {
+  const accountKey = accountIndexKey(accountId);
+  const members = await redis.smembers(accountKey);
+  if (members.length === 0) {
+    await redis.del(accountKey);
+    return;
+  }
+
+  const grantIds = members
+    .filter((member) => member.startsWith('Grant:'))
+    .map((member) => member.slice('Grant:'.length));
+  await Promise.all(grantIds.map((grantId) => new RedisAdapter('Grant', redis).revokeByGrantId(grantId)));
+
+  const values = await redis.mget(...members.map((member) => `oidc:${member}`));
+  const multi = redis.multi().del(accountKey, ...members.map((member) => `oidc:${member}`));
+  values.forEach((value, index) => {
+    const member = members[index];
+    if (!value || !member) return;
+    const payload = JSON.parse(value) as AdapterPayload;
+    if (payload.uid) multi.del(`oidc:uid:${payload.uid}`);
+    if (payload.userCode) multi.del(`oidc:userCode:${payload.userCode}`);
+    if (payload.grantId) multi.srem(grantIndexKey(payload.grantId), member);
+  });
+  await multi.exec();
 }
 
 export function createRedisAdapterFactory(redis: Redis) {

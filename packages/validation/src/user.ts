@@ -10,3 +10,10 @@ export const paginationSchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type PaginationInput = z.infer<typeof paginationSchema>;
+
+export const listUsersSchema = paginationSchema.extend({
+  // Case-insensitive substring match on email — lets an operator find a
+  // specific user instead of paging through every account.
+  search: z.string().trim().min(1).max(200).optional(),
+});
+export type ListUsersInput = z.infer<typeof listUsersSchema>;

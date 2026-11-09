@@ -1,12 +1,23 @@
-import { BadRequestException, ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Env } from '@sso-platform/config';
 import { AUDIT_ACTIONS } from '@sso-platform/types';
 import { ENV } from '../config/env.module';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { PasswordResetService } from '../password-reset/password-reset.service';
+import { PasswordResetMailerService } from '../password-reset/password-reset-mailer.service';
+import { EmailVerificationMailerService } from '../email-verification/email-verification-mailer.service';
+import { EmailVerificationService } from '../email-verification/email-verification.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { LoginThrottleService } from './login-throttle.service';
+import { PasswordResetThrottleService } from './password-reset-throttle.service';
 import { PasswordService } from './password.service';
 
 export interface RequestContext {
@@ -16,13 +27,19 @@ export interface RequestContext {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
     private readonly sessions: SessionsService,
     private readonly passwordReset: PasswordResetService,
+    private readonly passwordResetMailer: PasswordResetMailerService,
+    private readonly emailVerification: EmailVerificationService,
+    private readonly emailVerificationMailer: EmailVerificationMailerService,
     private readonly audit: AuditService,
     private readonly throttle: LoginThrottleService,
+    private readonly passwordResetThrottle: PasswordResetThrottleService,
     @Inject(ENV) private readonly env: Env,
   ) {}
 
@@ -31,8 +48,16 @@ export class AuthService {
     if (existing) throw new ConflictException('An account with this email already exists');
 
     const passwordHash = await this.passwords.hash(password);
+    const defaultRole = await this.prisma.role.findUnique({
+      where: { name: 'user' },
+      select: { id: true },
+    });
     const user = await this.prisma.user.create({
-      data: { email, passwordHash },
+      data: {
+        email,
+        passwordHash,
+        ...(defaultRole ? { roles: { create: { roleId: defaultRole.id } } } : {}),
+      },
     });
 
     await this.audit.record({
@@ -43,6 +68,8 @@ export class AuthService {
       ipAddress: ctx.ipAddress,
     });
 
+    await this.requestEmailVerification(user.id, user.email, ctx, false);
+
     return this.startSession(user.id, ctx);
   }
 
@@ -51,7 +78,10 @@ export class AuthService {
     await this.throttle.assertNotThrottled(email, ipKey);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
-    const valid = user ? await this.passwords.verify(user.passwordHash, password) : false;
+    // verifyOrDummy always runs a real Argon2id verify (against a dummy hash
+    // when the account doesn't exist) so this path's timing doesn't leak
+    // account existence — see PasswordService.verifyOrDummy.
+    const valid = await this.passwords.verifyOrDummy(user?.passwordHash, password);
 
     if (!user || !valid) {
       await this.throttle.recordFailure(email, ipKey);
@@ -116,6 +146,12 @@ export class AuthService {
   }
 
   async forgotPassword(email: string, ctx: RequestContext): Promise<void> {
+    // Throttle applies before the existence check and regardless of outcome,
+    // so the rate limit itself can't become a second account-existence
+    // oracle (e.g. only real accounts ever getting throttled).
+    await this.passwordResetThrottle.assertNotThrottled(email);
+    await this.passwordResetThrottle.recordRequest(email);
+
     const user = await this.prisma.user.findUnique({ where: { email } });
     // Always behave the same whether or not the account exists — don't leak
     // account existence via response timing/shape.
@@ -130,11 +166,13 @@ export class AuthService {
       ipAddress: ctx.ipAddress,
     });
 
-    // TODO(Phase 3): wire to SMTP (section 24: SMTP_HOST/PORT/USER/PASSWORD).
-    // Logged only in non-production so local dev/testing can complete the flow.
-    if (this.env.NODE_ENV !== 'production') {
-      console.log(`[dev] Password reset token for ${email}: ${token}`);
-    }
+    // Do not make account existence observable through SMTP response time.
+    // Delivery is intentionally detached; failures are logged without tokens.
+    void this.passwordResetMailer
+      .send(email, token)
+      .catch((error: unknown) =>
+        this.logger.error(`Password reset email delivery failed for ${email}: ${error}`),
+      );
   }
 
   async resetPassword(token: string, newPassword: string, ctx: RequestContext): Promise<void> {
@@ -154,13 +192,63 @@ export class AuthService {
     });
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string, ctx: RequestContext) {
+  async resendEmailVerification(userId: string, ctx: RequestContext): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, pendingEmail: true, emailVerified: true },
+    });
+    if (!user || (user.emailVerified && !user.pendingEmail)) return;
+    await this.requestEmailVerification(userId, user.pendingEmail ?? user.email, ctx, true);
+  }
+
+  async verifyEmail(token: string, ctx: RequestContext): Promise<void> {
+    const verified = await this.emailVerification.consume(token);
+    if (!verified) throw new BadRequestException('Invalid or expired email verification token');
+
+    await this.audit.record({
+      actorId: verified.userId,
+      action: AUDIT_ACTIONS.EMAIL_VERIFIED,
+      resourceType: 'User',
+      resourceId: verified.userId,
+      ipAddress: ctx.ipAddress,
+    });
+  }
+
+  private async requestEmailVerification(
+    userId: string,
+    email: string,
+    ctx: RequestContext,
+    enforceCooldown: boolean,
+  ): Promise<void> {
+    const token = await this.emailVerification.issue(userId, email, enforceCooldown);
+    await this.audit.record({
+      actorId: userId,
+      action: AUDIT_ACTIONS.EMAIL_VERIFICATION_REQUESTED,
+      resourceType: 'User',
+      resourceId: userId,
+      ipAddress: ctx.ipAddress,
+    });
+    void this.emailVerificationMailer
+      .send(email, token)
+      .catch((error: unknown) =>
+        this.logger.error(`Email verification delivery failed for ${email}: ${error}`),
+      );
+  }
+
+  async changePassword(
+    userId: string,
+    currentSessionId: string,
+    currentPassword: string,
+    newPassword: string,
+    ctx: RequestContext,
+  ) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const valid = await this.passwords.verify(user.passwordHash, currentPassword);
     if (!valid) throw new UnauthorizedException('Current password is incorrect');
 
     const passwordHash = await this.passwords.hash(newPassword);
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await this.sessions.revokeAllForUser(userId, currentSessionId);
 
     await this.audit.record({
       actorId: userId,

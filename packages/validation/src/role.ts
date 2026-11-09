@@ -13,3 +13,8 @@ export const updateRoleSchema = z.object({
   permissionIds: z.array(z.string()).optional(),
 });
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
+
+export const updateUserRolesSchema = z.object({
+  roleIds: z.array(z.string()).max(50),
+});
+export type UpdateUserRolesInput = z.infer<typeof updateUserRolesSchema>;

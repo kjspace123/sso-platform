@@ -12,3 +12,12 @@ export interface PublicApplication {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ConnectedApplication {
+  id: string;
+  name: string;
+  clientId: string;
+  status: ApplicationStatus;
+  scopes: string[];
+  grantedAt: string | null;
+}

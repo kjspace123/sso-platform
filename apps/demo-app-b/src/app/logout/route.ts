@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { oidcConfig } from "@/lib/config";
 
 const SESSION_COOKIE = "demo_b_session";
 
@@ -7,8 +8,8 @@ const SESSION_COOKIE = "demo_b_session";
  * browser session, matching how most relying parties behave (signing out of
  * one app doesn't force-sign-out every other app using the same SSO).
  */
-export async function GET(req: NextRequest) {
-  const response = NextResponse.redirect(new URL("/", req.url));
+export async function GET() {
+  const response = NextResponse.redirect(new URL("/", oidcConfig.appUrl));
   response.cookies.delete(SESSION_COOKIE);
   return response;
 }

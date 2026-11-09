@@ -12,7 +12,11 @@ import { apiFetch, ApiError } from "@/lib/api";
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
   );

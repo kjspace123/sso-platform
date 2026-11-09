@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import { SECRET_CIPHER } from '../common/crypto/crypto.module';
@@ -35,9 +35,9 @@ export class ApplicationsService {
     @Inject(SECRET_CIPHER) private readonly cipher: SecretCipher,
   ) {}
 
-  async create(input: CreateApplicationInput): Promise<{ application: ApplicationWithUris; clientSecret: string }> {
+  async create(input: CreateApplicationInput): Promise<{ application: ApplicationWithUris; clientSecret?: string }> {
     const clientId = generateClientId();
-    const clientSecret = generateClientSecret();
+    const clientSecret = input.type === 'CONFIDENTIAL' ? generateClientSecret() : undefined;
 
     const application = await this.prisma.application.create({
       data: {
@@ -48,7 +48,9 @@ export class ApplicationsService {
         postLogoutRedirectUris: {
           create: input.postLogoutRedirectUris.map((redirectUri) => ({ redirectUri })),
         },
-        clientSecrets: { create: { secretCiphertext: this.cipher.encrypt(clientSecret) } },
+        ...(clientSecret
+          ? { clientSecrets: { create: { secretCiphertext: this.cipher.encrypt(clientSecret) } } }
+          : {}),
       },
       include,
     });
@@ -103,7 +105,8 @@ export class ApplicationsService {
 
   /** Rotates the client secret. The old one is revoked, not deleted, for audit continuity. */
   async rotateSecret(id: string): Promise<string> {
-    await this.findByIdOrThrow(id);
+    const application = await this.findByIdOrThrow(id);
+    if (application.type === 'PUBLIC') throw new BadRequestException('Public clients do not use client secrets');
     const clientSecret = generateClientSecret();
 
     await this.prisma.$transaction([

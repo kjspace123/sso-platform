@@ -1,0 +1,25 @@
+{
+  email {$ACME_EMAIL}
+}
+(security) {
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Content-Security-Policy "frame-ancestors 'none'"
+    Referrer-Policy strict-origin-when-cross-origin
+    -Server
+  }
+}
+{$SSO_HOST} {
+  import security
+  reverse_proxy sso-web:3000
+}
+{$ADMIN_HOST} {
+  import security
+  reverse_proxy admin-web:3001
+}
+{$API_HOST} {
+  import security
+  reverse_proxy api:4000
+}

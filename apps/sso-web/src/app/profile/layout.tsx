@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import type { PublicUser } from "@sso-platform/types";
 import { apiFetch } from "@/lib/api";
 
 const TABS = [
@@ -15,10 +18,32 @@ export default function ProfileLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
 
+  // Gate every /profile/* route on a valid session — the API still enforces
+  // this per-endpoint, this is just so an unauthenticated visitor is sent to
+  // sign in instead of seeing "Are you signed in?" text on every tab.
+  const { data: user, isLoading, isError } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiFetch<PublicUser>("/users/me"),
+  });
+
+  useEffect(() => {
+    if (!isLoading && (isError || !user)) {
+      router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
+    }
+  }, [isLoading, isError, user, pathname, router]);
+
   const logout = async () => {
     await apiFetch("/auth/logout", { method: "POST" }).catch(() => {});
     router.push("/login");
   };
+
+  if (isLoading || isError || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-10">

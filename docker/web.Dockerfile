@@ -24,10 +24,15 @@ ARG APP
 # they must be present here, not just at container runtime.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_SSO_WEB_URL
+ARG NEXT_PUBLIC_ALLOWED_RETURN_ORIGINS
+ARG NEXT_PUBLIC_APP_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_SSO_WEB_URL=${NEXT_PUBLIC_SSO_WEB_URL}
+ENV NEXT_PUBLIC_ALLOWED_RETURN_ORIGINS=${NEXT_PUBLIC_ALLOWED_RETURN_ORIGINS}
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 COPY packages ./packages
 COPY apps/${APP} ./apps/${APP}
+RUN pnpm --recursive --filter @sso-platform/${APP}^... --if-present build
 RUN pnpm --filter @sso-platform/${APP} build
 
 FROM base AS runner
@@ -36,10 +41,13 @@ ARG PORT
 ENV NODE_ENV=production
 ENV PORT=${PORT}
 # Next.js standalone output already contains a pruned node_modules + server.js.
-COPY --from=build /repo/apps/${APP}/.next/standalone ./
-COPY --from=build /repo/apps/${APP}/.next/static ./apps/${APP}/.next/static
-COPY --from=build /repo/apps/${APP}/public ./apps/${APP}/public
+COPY --from=build --chown=node:node /repo/apps/${APP}/.next/standalone ./
+COPY --from=build --chown=node:node /repo/apps/${APP}/.next/static ./apps/${APP}/.next/static
+COPY --from=build --chown=node:node /repo/apps/${APP}/public ./apps/${APP}/public
 
 WORKDIR /repo/apps/${APP}
 EXPOSE ${PORT}
+# node:22-alpine ships an unprivileged `node` user (uid 1000) — run as that
+# instead of root so a container-breakout bug doesn't hand over a root shell.
+USER node
 CMD ["node", "server.js"]

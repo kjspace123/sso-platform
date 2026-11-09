@@ -52,10 +52,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
       path: request.url,
       timestamp: new Date().toISOString(),
+      // pino-http's ReqId type is string | number; our genReqId (see
+      // LoggingModule) always returns a string, but the type is wider.
+      requestId: request.id !== undefined ? String(request.id) : undefined,
     };
 
     if (statusCode >= 500) {
-      this.logger.error(redact({ path: request.url, exception: `${exception}` }));
+      this.logger.error(redact({ path: request.url, requestId: errorBody.requestId, exception: `${exception}` }));
     }
 
     response.status(statusCode).json(errorBody);

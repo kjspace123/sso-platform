@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 export function FormField({
   label,
@@ -23,7 +23,7 @@ export function FormField({
 }
 
 export const inputClassName =
-  "block w-full rounded-md border border-neutral-300 px-3 py-2 text-sm shadow-sm focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500";
+  'block min-h-11 w-full rounded-lg border border-neutral-400 bg-white px-3 py-2 text-sm text-neutral-950 shadow-sm placeholder:text-neutral-500 focus:border-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-800/20';
 
 export const buttonClassName =
-  "flex w-full justify-center rounded-md bg-neutral-900 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50";
+  'flex min-h-11 w-full items-center justify-center rounded-lg bg-neutral-950 px-3 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400 disabled:text-white';

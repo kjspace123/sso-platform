@@ -9,6 +9,7 @@ import { loginSchema, type LoginInput } from "@sso-platform/validation";
 import { AuthCard } from "@/components/auth-card";
 import { FormField, buttonClassName, inputClassName } from "@/components/form-field";
 import { apiFetch, ApiError } from "@/lib/api";
+import { resolveSafeReturnTo } from "@/lib/safe-return-to";
 
 interface InteractionDetails {
   client?: { name: string };
@@ -16,7 +17,11 @@ interface InteractionDetails {
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-neutral-500">Loading…</div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );
@@ -59,7 +64,7 @@ function LoginForm() {
       }
 
       await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(data) });
-      router.push(searchParams.get("returnTo") ?? "/profile");
+      window.location.assign(resolveSafeReturnTo(searchParams.get("returnTo"), window.location.origin));
     } catch (err) {
       setError("root", { message: err instanceof ApiError ? err.message : "Sign in failed" });
     }
@@ -78,7 +83,10 @@ function LoginForm() {
       footer={
         <>
           Don&apos;t have an account?{" "}
-          <Link href="/register" className="font-medium text-neutral-900 hover:underline">
+          <Link
+            href={interactionUid ? `/register?interaction=${encodeURIComponent(interactionUid)}` : "/register"}
+            className="font-medium text-neutral-900 hover:underline"
+          >
             Create one
           </Link>
         </>
