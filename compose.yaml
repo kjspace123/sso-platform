@@ -1,0 +1,137 @@
+# Local/deployment orchestration for the full platform (section 22).
+# `docker compose up` brings up Postgres, Redis, the API (with the OIDC
+# provider mounted inside it), all four frontends, and Nginx as the single
+# entrypoint. Copy apps/api/.env.example to apps/api/.env before running.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sso
+      POSTGRES_PASSWORD: sso
+      POSTGRES_DB: sso
+    ports:
+      # Host-side port only — container-to-container traffic inside compose
+      # still uses 5432 regardless. Remapped because 5432 is commonly taken
+      # by another project's Postgres already running on the host.
+      - "5434:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sso"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      # Same story as postgres above — host-side remap only.
+      - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    # Secrets (COOKIE_SECRET, CLIENT_SECRET_ENCRYPTION_KEY, OIDC_JWKS, SMTP_*) come from here;
+    # anything host/URL-shaped is overridden below to match the Nginx
+    # *.localhost domains instead of the bare-metal-dev ports in .env.example.
+    env_file: apps/api/.env
+    environment:
+      DATABASE_URL: postgresql://sso:sso@postgres:5432/sso
+      REDIS_URL: redis://redis:6379
+      SSO_BASE_URL: http://sso.localhost
+      ADMIN_BASE_URL: http://admin.localhost
+      DEMO_APP_A_BASE_URL: http://app-a.localhost
+      DEMO_APP_B_BASE_URL: http://app-b.localhost
+      OIDC_ISSUER: http://api.localhost
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  sso-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: sso-web
+        PORT: "3000"
+        NEXT_PUBLIC_API_URL: http://api.localhost
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: admin-web
+        PORT: "3001"
+        NEXT_PUBLIC_API_URL: http://api.localhost
+        NEXT_PUBLIC_SSO_WEB_URL: http://sso.localhost
+    ports:
+      - "3001:3001"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  demo-app-a:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: demo-app-a
+        PORT: "3002"
+        NEXT_PUBLIC_API_URL: http://api.localhost
+    ports:
+      - "3002:3002"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  demo-app-b:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP: demo-app-b
+        PORT: "3003"
+        NEXT_PUBLIC_API_URL: http://api.localhost
+    ports:
+      - "3003:3003"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - sso-web
+      - admin-web
+      - demo-app-a
+      - demo-app-b
+      - api
+
+volumes:
+  postgres-data:

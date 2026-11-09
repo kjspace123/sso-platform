@@ -1,0 +1,28 @@
+{
+  "name": "sso-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Single Sign-On platform monorepo (SSO web, admin portal, demo apps, NestJS API + OIDC provider)",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.1.1",
+  "scripts": {
+    "build:packages": "pnpm --recursive --filter=./packages/* build",
+    "dev": "pnpm build:packages && pnpm --parallel --filter=./apps/* dev",
+    "build": "pnpm build:packages && pnpm --recursive --filter=./apps/* build",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm --recursive test",
+    "format": "prettier --write .",
+    "prisma:generate": "pnpm --filter @sso-platform/api exec prisma generate",
+    "prisma:migrate": "pnpm --filter @sso-platform/api exec prisma migrate dev",
+    "prisma:studio": "pnpm --filter @sso-platform/api exec prisma studio",
+    "docker:up": "docker compose up",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

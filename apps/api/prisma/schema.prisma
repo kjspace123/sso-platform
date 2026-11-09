@@ -1,0 +1,245 @@
+// SSO Platform — Prisma schema
+// Mirrors section 10 ("Database Design") of SSO_System_Implementation_Plan.md.
+//
+// Notes:
+// - PostgreSQL is the authoritative store (section 6.5). Redis is used only for
+//   transient oidc-provider protocol state (auth codes, interaction sessions) —
+//   see apps/api/src/oidc.
+// - No plaintext secrets are ever persisted: passwordHash and tokenHash are
+//   one-way (Argon2id / SHA-256); ClientSecret.secretCiphertext is
+//   reversibly encrypted, not hashed, because oidc-provider's client auth
+//   needs to compare the actual value a client presents (section 6.8/16 —
+//   see apps/api/src/common/crypto/secret-cipher.ts for why).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  lastLoginAt   DateTime?
+
+  roles               UserRole[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs           AuditLog[]            @relation("AuditActor")
+
+  @@index([status])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// RBAC
+// ---------------------------------------------------------------------------
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String?
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// OAuth / OIDC clients
+// ---------------------------------------------------------------------------
+
+enum ApplicationStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ApplicationType {
+  CONFIDENTIAL
+  PUBLIC
+}
+
+model Application {
+  id        String            @id @default(cuid())
+  name      String
+  clientId  String            @unique
+  status    ApplicationStatus @default(ACTIVE)
+  type      ApplicationType   @default(CONFIDENTIAL)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  redirectUris           ApplicationRedirectUri[]
+  postLogoutRedirectUris ApplicationPostLogoutRedirectUri[]
+  clientSecrets          ClientSecret[]
+
+  @@map("applications")
+}
+
+model ApplicationRedirectUri {
+  id            String @id @default(cuid())
+  applicationId String
+  redirectUri   String
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, redirectUri])
+  @@map("application_redirect_uris")
+}
+
+model ApplicationPostLogoutRedirectUri {
+  id            String @id @default(cuid())
+  applicationId String
+  redirectUri   String
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, redirectUri])
+  @@map("application_post_logout_redirect_uris")
+}
+
+model ClientSecret {
+  id            String    @id @default(cuid())
+  applicationId String
+  // AES-256-GCM ciphertext (iv/tag/ciphertext, base64url, colon-delimited),
+  // not a one-way hash: the OIDC token endpoint has to compare the actual
+  // secret a confidential client presents (client_secret_basic/post), so it
+  // must be recoverable — unlike a user password, which never needs to be.
+  // See apps/api/src/common/crypto/secret-cipher.ts.
+  secretCiphertext String
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@map("client_secrets")
+}
+
+// ---------------------------------------------------------------------------
+// Sessions & tokens
+// ---------------------------------------------------------------------------
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  ipAddress  String?
+  userAgent  String?
+  deviceName String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  sessionId String
+  tokenHash String    @unique
+  familyId  String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  action       String
+  resourceType String?
+  resourceId   String?
+  ipAddress    String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

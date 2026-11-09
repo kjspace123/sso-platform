@@ -1,0 +1,2 @@
+Reserved for cross-cutting request middleware (e.g. request-id, CORS allowlist
+enforcement) as it's needed — see section 8 of the implementation plan.

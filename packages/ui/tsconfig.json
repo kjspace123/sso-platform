@@ -1,0 +1,13 @@
+{
+  "extends": "@sso-platform/tsconfig/base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true
+  },
+  "include": [
+    "src"
+  ]
+}
